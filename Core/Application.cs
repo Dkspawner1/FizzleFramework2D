@@ -8,7 +8,7 @@ using Log = Serilog.Log;
 
 namespace FizzleFramework2D.Core;
 
-public class Application : IApplication
+public sealed class Application : IApplication
 {
     private static readonly ILogger logger = Log.ForContext<Application>();
 
@@ -22,30 +22,11 @@ public class Application : IApplication
     private bool contentLoaded;
     private readonly SemaphoreSlim disposalSemaphore = new(1, 1);
     private readonly object resourceLock = new();
-
-
-
+    
     public bool IsInitialized => initialized;
     public bool IsContentLoaded => contentLoaded;
     public bool IsRunning => running;
-
-    static Application()
-    {
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .Enrich.WithThreadId()
-            .Enrich.WithThreadName()
-            .Enrich.WithMachineName()
-            .WriteTo.Console(outputTemplate:
-                "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{ThreadId:00}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
-            .WriteTo.File("logs/fizzle-.log",
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 7,
-                outputTemplate:
-                "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{ThreadId:00}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
-    }
-
+    
     public bool Initialize()
     {
         unsafe
@@ -162,6 +143,11 @@ public class Application : IApplication
                     logger.Information("Quit event received");
                     running = false;
                     break;
+                case (uint)SDLEventType.KeyDown:
+                    logger.Information($"KeyDown event received");
+                    if (e.Key.Key == SDLK_ESCAPE)
+                        running = false;
+                    break;
             }
 
         }
@@ -205,7 +191,8 @@ public class Application : IApplication
     public void UnloadContent()
     {
     }
-    protected virtual unsafe void Dispose(bool disposing)
+
+    private unsafe void Dispose(bool disposing)
     {
         if (disposing)
         {
@@ -248,7 +235,8 @@ public class Application : IApplication
         Dispose(false);
         GC.SuppressFinalize(this);
     }
-    protected virtual async ValueTask DisposeAsyncCore()
+
+    private async ValueTask DisposeAsyncCore()
     {
         await disposalSemaphore.WaitAsync().ConfigureAwait(false);
         try
