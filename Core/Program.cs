@@ -24,6 +24,7 @@ public static class Program
             .CreateLogger();
 
         Log.Information("FizzleFramework2D starting...");
+        
         try
         {
             using var application = new Application();
