@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Threading.Tasks;
 using FizzleFramework2D.Content.Assets;
 using Hexa.NET.SDL3;
@@ -45,4 +46,4 @@ namespace FizzleFramework2D.Graphics.Shaders;
     {
         public ShaderLinkException(string message) : base(message) { }
         public ShaderLinkException(string message, Exception innerException) : base(message, innerException) { }
-}
+    }
