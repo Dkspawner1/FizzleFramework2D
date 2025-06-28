@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FizzleFramework2D.Configuration;
 using FizzleFramework2D.Graphics.Shaders;
+using FizzleFramework2D.Graphics.Textures;
 using Hexa.NET.SDL3;
 using Serilog;
 using static Hexa.NET.SDL3.SDL;
@@ -21,6 +22,10 @@ namespace FizzleFramework2D.Core;
 
         // Managers
         private IShaderManager? shaderManager;
+        private ITextureManager? textureManager;
+        
+        private ITexture2D[]? buttonTextures; 
+        private IShaderProgram? buttonShaderProgram;
 
         // State management
         private volatile bool running;
@@ -32,8 +37,7 @@ namespace FizzleFramework2D.Core;
         public bool IsInitialized => initialized;
         public bool IsContentLoaded => contentLoaded;
         public bool IsRunning => running;
-
-        // ✅ Fixed: Remove 'ref' from constructor parameter
+        
         public Application(GameSettings settings)
         {
             this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -82,6 +86,7 @@ namespace FizzleFramework2D.Core;
                         settings.Rendering.VSync ? SDLGPUPresentMode.Vsync : SDLGPUPresentMode.Immediate);
                     
                     var swapchainFormat = GetGPUSwapchainTextureFormat(device, window);
+                    
                     logger.Information("Swapchain format: {Format}", swapchainFormat);
                     
                     shaderManager = new ShaderManager(device, settings);

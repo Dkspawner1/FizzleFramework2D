@@ -28,6 +28,7 @@ namespace FizzleFramework2D.Configuration;
     public sealed class ContentSettings
     {
         public string ShadersDirectory { get; init; } = "assets/shaders";
+        public string TexturesDirectory { get; init; } = "assets/textures";
     }
 
     public sealed class DevelopmentSettings
