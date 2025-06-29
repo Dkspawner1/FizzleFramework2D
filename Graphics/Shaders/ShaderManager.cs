@@ -139,7 +139,7 @@ public sealed class ShaderManager : IShaderManager
         }
     }
 
-  public async Task<IShaderProgram> CreateProgramAsync(string vertexShaderName, string fragmentShaderName)
+public async Task<IShaderProgram> CreateProgramAsync(string vertexShaderName, string fragmentShaderName)
 {
     if (string.IsNullOrEmpty(vertexShaderName))
         throw new ArgumentException("Vertex shader name cannot be null or empty", nameof(vertexShaderName));
@@ -161,13 +161,12 @@ public sealed class ShaderManager : IShaderManager
         var vertexShader = await LoadShaderAsync(vertexShaderName, SDLGPUShaderStage.Vertex);
         var fragmentShader = await LoadShaderAsync(fragmentShaderName, SDLGPUShaderStage.Fragment);
 
-        // ✅ COMPLETE FIX: Configure vertex input attributes to match your shaders
+        // Create graphics pipeline with complete configuration
         unsafe
         {
-            // Configure vertex attributes to match your shader inputs
+            // Configure vertex input attributes
             var vertexAttributes = stackalloc SDLGPUVertexAttribute[3];
             
-            // layout(location = 0) in vec3 position
             vertexAttributes[0] = new SDLGPUVertexAttribute
             {
                 Location = 0,
@@ -176,7 +175,6 @@ public sealed class ShaderManager : IShaderManager
                 Offset = 0
             };
             
-            // layout(location = 1) in vec2 texcoord  
             vertexAttributes[1] = new SDLGPUVertexAttribute
             {
                 Location = 1,
@@ -185,7 +183,6 @@ public sealed class ShaderManager : IShaderManager
                 Offset = 12 // 3 floats * 4 bytes = 12
             };
             
-            // layout(location = 2) in vec4 color
             vertexAttributes[2] = new SDLGPUVertexAttribute
             {
                 Location = 2,
@@ -194,15 +191,13 @@ public sealed class ShaderManager : IShaderManager
                 Offset = 20 // 12 + (2 floats * 4 bytes) = 20
             };
 
-            // Configure vertex buffer description
             var vertexBufferDescription = new SDLGPUVertexBufferDescription
             {
                 Slot = 0,
-                Pitch = 36, // 3*4 + 2*4 + 4*4 = 36 bytes per vertex (vec3 + vec2 + vec4)
+                Pitch = 36, // 3*4 + 2*4 + 4*4 = 36 bytes per vertex
                 InputRate = SDLGPUVertexInputRate.Vertex
             };
 
-            // Create vertex input state
             var vertexInputState = new SDLGPUVertexInputState
             {
                 VertexBufferDescriptions = &vertexBufferDescription,
@@ -211,12 +206,32 @@ public sealed class ShaderManager : IShaderManager
                 NumVertexAttributes = 3
             };
 
+            // ✅ CRITICAL FIX: Add color target descriptions to match render pass
+            var colorTargetDescription = new SDLGPUColorTargetDescription
+            {
+                Format = SDLGPUTextureFormat.B8G8R8A8Unorm, // ✅ Match your swapchain format
+                BlendState = new SDLGPUColorTargetBlendState
+                {
+                    EnableBlend = 1,
+                    AlphaBlendOp = SDLGPUBlendOp.Add,
+                    ColorBlendOp = SDLGPUBlendOp.Add,
+                    ColorWriteMask = SDLGPUColorComponentFlags.R | 
+                                   SDLGPUColorComponentFlags.G | 
+                                   SDLGPUColorComponentFlags.B | 
+                                   SDLGPUColorComponentFlags.A,
+                    SrcColorBlendfactor = SDLGPUBlendFactor.SrcAlpha,
+                    DstColorBlendfactor = SDLGPUBlendFactor.OneMinusSrcAlpha,
+                    SrcAlphaBlendfactor= SDLGPUBlendFactor.One,
+                    DstAlphaBlendfactor = SDLGPUBlendFactor.OneMinusSrcAlpha
+                }
+            };
+
             var pipelineInfo = new SDLGPUGraphicsPipelineCreateInfo
             {
                 VertexShader = ((Shader)vertexShader).Handle,
                 FragmentShader = ((Shader)fragmentShader).Handle,
                 
-                // ✅ CRITICAL: Add vertex input state to match shader expectations
+                // Add vertex input state
                 VertexInputState = vertexInputState,
                 
                 PrimitiveType = SDLGPUPrimitiveType.Trianglelist,
@@ -231,9 +246,23 @@ public sealed class ShaderManager : IShaderManager
                 MultisampleState = new SDLGPUMultisampleState
                 {
                     SampleCount = SDLGPUSampleCount.Samplecount1,
-                    SampleMask = 0 // Correct value as you found
+                    SampleMask = 0 // Correct value as you discovered
+                },
+                TargetInfo =
+                {
+                    ColorTargetDescriptions =&colorTargetDescription, 
+                    NumColorTargets = 1,
+                },
+                DepthStencilState = new SDLGPUDepthStencilState
+                {
+                    CompareOp = SDLGPUCompareOp.Always,
+                    BackStencilState = new SDLGPUStencilOpState(),
+                    FrontStencilState = new SDLGPUStencilOpState(),
+                    CompareMask = 0,
+                    WriteMask = 0
                 }
             };
+            
 
             var pipeline = CreateGPUGraphicsPipeline(device, &pipelineInfo);
             if (pipeline == null)
