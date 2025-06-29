@@ -206,63 +206,85 @@ private unsafe void CreateRenderingResources()
 {
     logger.Information("Creating vertex buffer …");
 
-    // --- Existing vertexBuffer code (unchanged) ---
+    // --- Static button vertex buffer ---
+
+    // Vertex array: position.xyz, uv.xy, color.rgba (6 verts per button × 3 buttons)
     float[] vertices =
     {
-        // position        uv      color (white)
-        -0.8f, -0.3f, 0,   0, 0,   1,1,1,1,
-        -0.2f, -0.3f, 0,   1, 0,   1,1,1,1,
-        -0.2f,  0.3f, 0,   1, 1,   1,1,1,1,
-        -0.8f, -0.3f, 0,   0, 0,   1,1,1,1,
-        -0.2f,  0.3f, 0,   1, 1,   1,1,1,1,
-        -0.8f,  0.3f, 0,   0, 1,   1,1,1,1,
-        // Button 1…
-        -0.3f, -0.3f, 0,   0, 0,   1,1,1,1,
-         0.3f, -0.3f, 0,   1, 0,   1,1,1,1,
-         0.3f,  0.3f, 0,   1, 1,   1,1,1,1,
-        -0.3f, -0.3f, 0,   0, 0,   1,1,1,1,
-         0.3f,  0.3f, 0,   1, 1,   1,1,1,1,
-        -0.3f,  0.3f, 0,   0, 1,   1,1,1,1,
-        // Button 2…
-         0.2f, -0.3f, 0,   0, 0,   1,1,1,1,
-         0.8f, -0.3f, 0,   1, 0,   1,1,1,1,
-         0.8f,  0.3f, 0,   1, 1,   1,1,1,1,
-         0.2f, -0.3f, 0,   0, 0,   1,1,1,1,
-         0.8f,  0.3f, 0,   1, 1,   1,1,1,1,
-         0.2f,  0.3f, 0,   0, 1,   1,1,1,1,
+        // Button 0
+        -0.8f, -0.3f, 0f,   0f, 0f,   1f,1f,1f,1f,
+        -0.2f, -0.3f, 0f,   1f, 0f,   1f,1f,1f,1f,
+        -0.2f,  0.3f, 0f,   1f, 1f,   1f,1f,1f,1f,
+        -0.8f, -0.3f, 0f,   0f, 0f,   1f,1f,1f,1f,
+        -0.2f,  0.3f, 0f,   1f, 1f,   1f,1f,1f,1f,
+        -0.8f,  0.3f, 0f,   0f, 1f,   1f,1f,1f,1f,
+
+        // Button 1
+        -0.3f, -0.3f, 0f,   0f, 0f,   1f,1f,1f,1f,
+         0.3f, -0.3f, 0f,   1f, 0f,   1f,1f,1f,1f,
+         0.3f,  0.3f, 0f,   1f, 1f,   1f,1f,1f,1f,
+        -0.3f, -0.3f, 0f,   0f, 0f,   1f,1f,1f,1f,
+         0.3f,  0.3f, 0f,   1f, 1f,   1f,1f,1f,1f,
+        -0.3f,  0.3f, 0f,   0f, 1f,   1f,1f,1f,1f,
+
+        // Button 2
+         0.2f, -0.3f, 0f,   0f, 0f,   1f,1f,1f,1f,
+         0.8f, -0.3f, 0f,   1f, 0f,   1f,1f,1f,1f,
+         0.8f,  0.3f, 0f,   1f, 1f,   1f,1f,1f,1f,
+         0.2f, -0.3f, 0f,   0f, 0f,   1f,1f,1f,1f,
+         0.8f,  0.3f, 0f,   1f, 1f,   1f,1f,1f,1f,
+         0.2f,  0.3f, 0f,   0f, 1f,   1f,1f,1f,1f,
     };
-    uint size = (uint)(vertices.Length * sizeof(float));
 
-    var bc = new SDLGPUBufferCreateInfo { Usage = SDLGPUBufferUsageFlags.Vertex, Size = size };
-    vertexBuffer = CreateGPUBuffer(device, &bc);
+    // Compute size in bytes and create GPU buffer
+    uint vertexDataSize = (uint)(vertices.Length * sizeof(float));
+    var vbCreateInfo = new SDLGPUBufferCreateInfo
+    {
+        Usage = SDLGPUBufferUsageFlags.Vertex,
+        Size  = vertexDataSize
+    };
+
+    vertexBuffer = CreateGPUBuffer(device, &vbCreateInfo);
     if (vertexBuffer == null)
-        throw new InvalidOperationException("Vertex buffer creation failed.");
+        throw new InvalidOperationException("Failed to create button vertex buffer.");
 
-    // Upload vertex data…
-    var transferInfo = new SDLGPUTransferBufferCreateInfo { Usage = SDLGPUTransferBufferUsage.Upload, Size = size };
-    var staging = CreateGPUTransferBuffer(device, &transferInfo);
+    // Upload static vertex data via staging buffer
+    var stagingCreateInfo = new SDLGPUTransferBufferCreateInfo
+    {
+        Usage = SDLGPUTransferBufferUsage.Upload,
+        Size  = vertexDataSize
+    };
+
+    var staging = CreateGPUTransferBuffer(device, &stagingCreateInfo);
+    if (staging == null)
+        throw new InvalidOperationException("Failed to create staging buffer for button vertices.");
+
     float* dst = (float*)MapGPUTransferBuffer(device, staging, false);
-    fixed (float* src = vertices) Buffer.MemoryCopy(src, dst, size, size);
+    fixed (float* src = vertices)
+        Buffer.MemoryCopy(src, dst, vertexDataSize, vertexDataSize);
     UnmapGPUTransferBuffer(device, staging);
 
-    var cmd = AcquireGPUCommandBuffer(device);
-    var copy = BeginGPUCopyPass(cmd);
-    var srcLoc = new SDLGPUTransferBufferLocation { TransferBuffer = staging, Offset = 0 };
-    var dstReg = new SDLGPUBufferRegion { Buffer = vertexBuffer, Offset = 0, Size = size };
+    var cmd     = AcquireGPUCommandBuffer(device);
+    var copy    = BeginGPUCopyPass(cmd);
+    var srcLoc  = new SDLGPUTransferBufferLocation { TransferBuffer = staging, Offset = 0 };
+    var dstReg  = new SDLGPUBufferRegion            { Buffer = vertexBuffer, Offset = 0, Size = vertexDataSize };
     UploadToGPUBuffer(copy, &srcLoc, &dstReg, false);
     EndGPUCopyPass(copy);
     SubmitGPUCommandBuffer(cmd);
     WaitForGPUIdle(device);
     ReleaseGPUTransferBuffer(device, staging);
 
-    // --- NEW: Dynamic quad buffer for DrawTexture ---
-    uint quadSize = 4u * (3 + 2 + 4) * sizeof(float); // 4 vertices × (pos3 + uv2 + color4)
+    // --- Dynamic quad buffers for DrawTexture ---
+
+    // 4 vertices × (pos3 + uv2 + color4) floats
+    uint quadDataSize = 4u * (3 + 2 + 4) * sizeof(float);
 
     var quadVBInfo = new SDLGPUBufferCreateInfo
     {
         Usage = SDLGPUBufferUsageFlags.Vertex,
-        Size  = quadSize
+        Size  = quadDataSize
     };
+
     quadVertexBuffer = CreateGPUBuffer(device, &quadVBInfo);
     if (quadVertexBuffer == null)
         throw new InvalidOperationException("Failed to create quad vertex buffer.");
@@ -270,8 +292,9 @@ private unsafe void CreateRenderingResources()
     var quadStagingInfo = new SDLGPUTransferBufferCreateInfo
     {
         Usage = SDLGPUTransferBufferUsage.Upload,
-        Size  = quadSize
+        Size  = quadDataSize
     };
+
     quadStagingBuffer = CreateGPUTransferBuffer(device, &quadStagingInfo);
     if (quadStagingBuffer == null)
         throw new InvalidOperationException("Failed to create quad staging buffer.");
@@ -296,9 +319,9 @@ public unsafe void DrawTexture(ITexture2D texture, Rectangle dest, Vector4 tint)
     // 2) Build quad vertex data: pos.xyz, uv.xy, color.xyzw
     float[] quad =
     {
-        x0,y0,0f,  0f,0f,  tint.X,tint.Y,tint.Z,tint.W,
-        x1,y0,0f,  1f,0f,  tint.X,tint.Y,tint.Z,tint.W,
-        x1,y1,0f,  1f,1f,  tint.X,tint.Y,tint.Z,tint.W,
+        x0,y0,0f,  0f,1f,  tint.X,tint.Y,tint.Z,tint.W,
+        x1,y0,0f,  1f,1f,  tint.X,tint.Y,tint.Z,tint.W,
+        x1,y1,0f,  1f,0f,  tint.X,tint.Y,tint.Z,tint.W,
         x0,y1,0f,  0f,1f,  tint.X,tint.Y,tint.Z,tint.W
     };
 
