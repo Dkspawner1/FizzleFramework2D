@@ -17,7 +17,6 @@ internal sealed class Shader : IShader
     public SDLGPUShaderStage Stage { get; }
     public unsafe SDLGPUShader* Handle { get; private set; }
 
-    // Fixed: Method instead of property for ReadOnlySpan<byte>
     public ReadOnlySpan<byte> GetBytecode() => bytecodeArray.AsSpan();
 
     public unsafe bool IsCompiled => Handle != null && !disposed;
@@ -43,7 +42,6 @@ internal sealed class Shader : IShader
 
             if (Handle != null)
             {
-                // Fixed: Use correct SDL3 function name
                 ReleaseGPUShader(device, Handle);
                 Handle = null;
             }
@@ -87,7 +85,6 @@ internal sealed class ShaderProgram : IShaderProgram
 
             if (Pipeline != null)
             {
-                // Fixed: Use correct SDL3 function name
                 ReleaseGPUGraphicsPipeline(device, Pipeline);
                 Pipeline = null;
             }

@@ -1,14 +1,15 @@
 ﻿#version 450
 
-layout(location = 0) in vec2 frag_texcoord;
-layout(location = 1) in vec4 frag_color;
+layout(location = 0) in  vec2 frag_uv;
+layout(location = 1) in  vec4 frag_color;
 layout(location = 0) out vec4 out_color;
 
-void main() {
-    // Simple solid color output (no texture sampling)
-    out_color = frag_color;
+/*  SDL 3 binds “fragment samplers” with
+    SDL_BindGPUFragmentSamplers().  Slot 0 maps to binding 0.          */
+layout(binding = 0) uniform sampler2D uTex;
 
-    // Optional: Add some UV-based gradient effect
-    float gradient = (frag_texcoord.x + frag_texcoord.y) * 0.5;
-    out_color.rgb *= (0.8 + 0.2 * gradient);
+void main()
+{
+    vec4 tex = texture(uTex, frag_uv);
+    out_color = tex * frag_color;        // tint
 }

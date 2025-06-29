@@ -50,7 +50,6 @@ namespace FizzleFramework2D.Core;
 
             try
             {
-                // ✅ Fixed: Remove 'ref' keyword
                 using var application = new Application(settings);
 
                 if (!application.Initialize())

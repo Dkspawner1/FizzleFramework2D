@@ -25,8 +25,8 @@ namespace FizzleFramework2D.Core
         // Managers
         private IShaderManager? shaderManager;
         private ITextureManager? textureManager;
-        
-        private ITexture2D[]? buttonTextures; 
+
+        private ITexture2D[]? buttonTextures;
         private IShaderProgram? buttonShaderProgram;
 
         private unsafe SDLGPUBuffer* vertexBuffer;
@@ -42,7 +42,7 @@ namespace FizzleFramework2D.Core
         public bool IsInitialized => initialized;
         public bool IsContentLoaded => contentLoaded;
         public bool IsRunning => running;
-        
+
         public Application(GameSettings settings)
         {
             this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -86,21 +86,21 @@ namespace FizzleFramework2D.Core
                         return false;
                     }
 
-                    SetGPUSwapchainParameters(device, window, 
+                    SetGPUSwapchainParameters(device, window,
                         SDLGPUSwapchainComposition.Sdr,
                         settings.Rendering.VSync ? SDLGPUPresentMode.Vsync : SDLGPUPresentMode.Immediate);
-                    
+
                     var swapchainFormat = GetGPUSwapchainTextureFormat(device, window);
                     logger.Information("Swapchain format: {Format}", swapchainFormat);
-                    
+
                     shaderManager = new ShaderManager(device, settings);
                     logger.Information("ShaderManager initialized");
-                    
+
                     textureManager = new TextureManager(device, settings);
                     logger.Information("TextureManager initialized");
-                    
+
                     CreateRenderingResources();
-                    
+
                     initialized = true;
                     logger.Information("FizzleFramework2D initialization complete");
                     return true;
@@ -113,134 +113,147 @@ namespace FizzleFramework2D.Core
             }
         }
 
-private unsafe void CreateRenderingResources()
-{
-    logger.Information("Creating rendering resources");
-    
-    // ✅ SOLUTION: Create vertex data for 3 separate buttons at different positions
-    var vertexData = new float[]
-    {
-        // Button 0 - Left position (-0.8f to -0.2f on X-axis)
-        // Position (vec3)           UV (vec2)     Color (vec4)
-        -0.8f, -0.3f, 0.0f,  0.0f, 1.0f,   1.0f, 0.0f, 0.0f, 1.0f, // Bottom-left (red tint)
-        -0.2f, -0.3f, 0.0f,  1.0f, 1.0f,   1.0f, 0.0f, 0.0f, 1.0f, // Bottom-right
-        -0.2f,  0.3f, 0.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f, // Top-right
-        
-        -0.8f, -0.3f, 0.0f,  0.0f, 1.0f,   1.0f, 0.0f, 0.0f, 1.0f, // Bottom-left
-        -0.2f,  0.3f, 0.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f, // Top-right
-        -0.8f,  0.3f, 0.0f,  0.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f, // Top-left
+        private unsafe void BindTexture(SDLGPURenderPass* pass, ITexture2D texture)
+        {
+            SDLGPUTextureSamplerBinding binding = new()
+            {
+                Texture =  texture.Handle,
+                Sampler = textureSampler
+            };
+            ;
+            BindGPUFragmentSamplers(pass, 0, &binding, 1);
+        }
 
-        // Button 1 - Center position (-0.3f to 0.3f on X-axis)
-        -0.3f, -0.3f, 0.0f,  0.0f, 1.0f,   0.0f, 1.0f, 0.0f, 1.0f, // Bottom-left (green tint)
-         0.3f, -0.3f, 0.0f,  1.0f, 1.0f,   0.0f, 1.0f, 0.0f, 1.0f, // Bottom-right
-         0.3f,  0.3f, 0.0f,  1.0f, 0.0f,   0.0f, 1.0f, 0.0f, 1.0f, // Top-right
-        
-        -0.3f, -0.3f, 0.0f,  0.0f, 1.0f,   0.0f, 1.0f, 0.0f, 1.0f, // Bottom-left
-         0.3f,  0.3f, 0.0f,  1.0f, 0.0f,   0.0f, 1.0f, 0.0f, 1.0f, // Top-right
-        -0.3f,  0.3f, 0.0f,  0.0f, 0.0f,   0.0f, 1.0f, 0.0f, 1.0f, // Top-left
+        private unsafe void CreateRenderingResources()
+        {
+            logger.Information("Creating rendering resources");
 
-        // Button 2 - Right position (0.2f to 0.8f on X-axis)
-         0.2f, -0.3f, 0.0f,  0.0f, 1.0f,   0.0f, 0.0f, 1.0f, 1.0f, // Bottom-left (blue tint)
-         0.8f, -0.3f, 0.0f,  1.0f, 1.0f,   0.0f, 0.0f, 1.0f, 1.0f, // Bottom-right
-         0.8f,  0.3f, 0.0f,  1.0f, 0.0f,   0.0f, 0.0f, 1.0f, 1.0f, // Top-right
-        
-         0.2f, -0.3f, 0.0f,  0.0f, 1.0f,   0.0f, 0.0f, 1.0f, 1.0f, // Bottom-left
-         0.8f,  0.3f, 0.0f,  1.0f, 0.0f,   0.0f, 0.0f, 1.0f, 1.0f, // Top-right
-         0.2f,  0.3f, 0.0f,  0.0f, 0.0f,   0.0f, 0.0f, 1.0f, 1.0f, // Top-left
-    };
+            // ✅ SOLUTION: Create vertex data for 3 separate buttons at different positions
+            var vertexData = new float[]
+            {
+                // Button 0 - Left position (-0.8f to -0.2f on X-axis)
+                // Position (vec3)           UV (vec2)     Color (vec4)
+                -0.8f, -0.3f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Bottom-left (red tint)
+                -0.2f, -0.3f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Bottom-right
+                -0.2f, 0.3f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Top-right
 
-    var vertexDataSize = vertexData.Length * sizeof(float);
-    
-    var bufferCreateInfo = new SDLGPUBufferCreateInfo
-    {
-        Usage = SDLGPUBufferUsageFlags.Vertex,
-        Size = (uint)vertexDataSize
-    };
+                -0.8f, -0.3f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Bottom-left
+                -0.2f, 0.3f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Top-right
+                -0.8f, 0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Top-left
 
-    vertexBuffer = CreateGPUBuffer(device, &bufferCreateInfo);
-    if (vertexBuffer == null)
-    {
-        throw new InvalidOperationException("Failed to create vertex buffer");
-    }
+                // Button 1 - Center position (-0.3f to 0.3f on X-axis)
+                -0.3f, -0.3f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, // Bottom-left (green tint)
+                0.3f, -0.3f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, // Bottom-right
+                0.3f, 0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, // Top-right
 
-    // Upload vertex data to GPU (keep existing upload code)
-    var uploadCmd = AcquireGPUCommandBuffer(device);
-    var copyPass = BeginGPUCopyPass(uploadCmd);
-    
-    var transferBufferCreateInfo = new SDLGPUTransferBufferCreateInfo
-    {
-        Usage = SDLGPUTransferBufferUsage.Upload,
-        Size = (uint)vertexDataSize
-    };
+                -0.3f, -0.3f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, // Bottom-left
+                0.3f, 0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, // Top-right
+                -0.3f, 0.3f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, // Top-left
 
-    var transferBuffer = CreateGPUTransferBuffer(device, &transferBufferCreateInfo);
-    var mappedData = MapGPUTransferBuffer(device, transferBuffer, false);
-    
-    fixed (float* verticesPtr = vertexData)
-    {
-        Buffer.MemoryCopy(verticesPtr, mappedData, vertexDataSize, vertexDataSize);
-    }
-    
-    UnmapGPUTransferBuffer(device, transferBuffer);
+                // Button 2 - Right position (0.2f to 0.8f on X-axis)
+                0.2f, -0.3f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // Bottom-left (blue tint)
+                0.8f, -0.3f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // Bottom-right
+                0.8f, 0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, // Top-right
 
-    var bufferTransferInfo = new SDLGPUTransferBufferLocation
-    {
-        TransferBuffer = transferBuffer,
-        Offset = 0
-    };
+                0.2f, -0.3f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // Bottom-left
+                0.8f, 0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, // Top-right
+                0.2f, 0.3f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, // Top-left
+            };
 
-    var bufferRegion = new SDLGPUBufferRegion
-    {
-        Buffer = vertexBuffer,
-        Offset = 0,
-        Size = (uint)vertexDataSize
-    };
+            var vertexDataSize = vertexData.Length * sizeof(float);
 
-    UploadToGPUBuffer(copyPass, &bufferTransferInfo, &bufferRegion, false);
-    EndGPUCopyPass(copyPass);
-    SubmitGPUCommandBuffer(uploadCmd);
-    WaitForGPUIdle(device);
-    ReleaseGPUTransferBuffer(device, transferBuffer);
+            var bufferCreateInfo = new SDLGPUBufferCreateInfo
+            {
+                Usage = SDLGPUBufferUsageFlags.Vertex,
+                Size = (uint)vertexDataSize
+            };
 
-    // Create texture sampler (keep existing code)
-    var samplerCreateInfo = new SDLGPUSamplerCreateInfo
-    {
-        MinFilter = SDLGPUFilter.Linear,
-        MagFilter = SDLGPUFilter.Linear,
-        MipmapMode = SDLGPUSamplerMipmapMode.Linear,
-        AddressModeU = SDLGPUSamplerAddressMode.ClampToEdge,
-        AddressModeV = SDLGPUSamplerAddressMode.ClampToEdge,
-        AddressModeW = SDLGPUSamplerAddressMode.ClampToEdge
-    };
+            vertexBuffer = CreateGPUBuffer(device, &bufferCreateInfo);
+            if (vertexBuffer == null)
+            {
+                throw new InvalidOperationException("Failed to create vertex buffer");
+            }
 
-    textureSampler = CreateGPUSampler(device, &samplerCreateInfo);
-    if (textureSampler == null)
-    {
-        throw new InvalidOperationException("Failed to create texture sampler");
-    }
+            // Upload vertex data to GPU (keep existing upload code)
+            var uploadCmd = AcquireGPUCommandBuffer(device);
+            var copyPass = BeginGPUCopyPass(uploadCmd);
 
-    logger.Information("✅ Rendering resources created successfully");
-}
+            var transferBufferCreateInfo = new SDLGPUTransferBufferCreateInfo
+            {
+                Usage = SDLGPUTransferBufferUsage.Upload,
+                Size = (uint)vertexDataSize
+            };
+
+            var transferBuffer = CreateGPUTransferBuffer(device, &transferBufferCreateInfo);
+            var mappedData = MapGPUTransferBuffer(device, transferBuffer, false);
+
+            fixed (float* verticesPtr = vertexData)
+            {
+                Buffer.MemoryCopy(verticesPtr, mappedData, vertexDataSize, vertexDataSize);
+            }
+
+            UnmapGPUTransferBuffer(device, transferBuffer);
+
+            var bufferTransferInfo = new SDLGPUTransferBufferLocation
+            {
+                TransferBuffer = transferBuffer,
+                Offset = 0
+            };
+
+            var bufferRegion = new SDLGPUBufferRegion
+            {
+                Buffer = vertexBuffer,
+                Offset = 0,
+                Size = (uint)vertexDataSize
+            };
+
+            UploadToGPUBuffer(copyPass, &bufferTransferInfo, &bufferRegion, false);
+            EndGPUCopyPass(copyPass);
+            SubmitGPUCommandBuffer(uploadCmd);
+            WaitForGPUIdle(device);
+            ReleaseGPUTransferBuffer(device, transferBuffer);
+
+            // Create texture sampler (keep existing code)
+            var samplerCreateInfo = new SDLGPUSamplerCreateInfo
+            {
+                MinFilter = SDLGPUFilter.Linear,
+                MagFilter = SDLGPUFilter.Linear,
+                MipmapMode = SDLGPUSamplerMipmapMode.Linear,
+                AddressModeU = SDLGPUSamplerAddressMode.ClampToEdge,
+                AddressModeV = SDLGPUSamplerAddressMode.ClampToEdge,
+                AddressModeW = SDLGPUSamplerAddressMode.ClampToEdge
+            };
+
+            textureSampler = CreateGPUSampler(device, &samplerCreateInfo);
+            if (textureSampler == null)
+            {
+                throw new InvalidOperationException("Failed to create texture sampler");
+            }
+
+            logger.Information("✅ Rendering resources created successfully");
+        }
+
         public void LoadContent()
         {
-            if (!initialized || shaderManager == null || textureManager == null) 
+            if (!initialized || shaderManager == null || textureManager == null)
             {
                 logger.Warning("LoadContent called before initialization");
                 return;
             }
+
             if (contentLoaded)
             {
                 logger.Warning("LoadContent called when content already loaded");
                 return;
             }
-                
+
             logger.Information("Starting content loading");
             try
             {
                 // ✅ CRITICAL FIX: Use synchronous loading to avoid race conditions
                 var loadTask = LoadContentAsync();
                 loadTask.Wait(); // Wait for completion before continuing
-                
+
                 contentLoaded = true;
                 logger.Information("✅ Content loading complete - 3 button textures loaded successfully!");
             }
@@ -251,7 +264,6 @@ private unsafe void CreateRenderingResources()
             }
         }
 
-        // ✅ FIXED: Keep async method but make it private and properly awaited
         private async Task LoadContentAsync()
         {
             if (shaderManager == null || textureManager == null) return;
@@ -259,10 +271,10 @@ private unsafe void CreateRenderingResources()
             // Load shaders
             logger.Information("Loading vertex shader...");
             await shaderManager.LoadShaderAsync("button", SDLGPUShaderStage.Vertex);
-            
+
             logger.Information("Loading fragment shader...");
             await shaderManager.LoadShaderAsync("button", SDLGPUShaderStage.Fragment);
-            
+
             // Create shader program
             logger.Information("Creating shader program...");
             buttonShaderProgram = await shaderManager.CreateProgramAsync("button", "button");
@@ -271,17 +283,17 @@ private unsafe void CreateRenderingResources()
             // Load 3 individual button textures into array
             logger.Information("Loading button textures...");
             buttonTextures = new ITexture2D[3];
-            
+
             buttonTextures[0] = await textureManager.LoadTextureAsync("btn0.png");
-            logger.Information("✅ Loaded btn0.png: {Width}x{Height}", 
+            logger.Information("✅ Loaded btn0.png: {Width}x{Height}",
                 buttonTextures[0].Width, buttonTextures[0].Height);
-            
+
             buttonTextures[1] = await textureManager.LoadTextureAsync("btn1.png");
-            logger.Information("✅ Loaded btn1.png: {Width}x{Height}", 
+            logger.Information("✅ Loaded btn1.png: {Width}x{Height}",
                 buttonTextures[1].Width, buttonTextures[1].Height);
-            
+
             buttonTextures[2] = await textureManager.LoadTextureAsync("btn2.png");
-            logger.Information("✅ Loaded btn2.png: {Width}x{Height}", 
+            logger.Information("✅ Loaded btn2.png: {Width}x{Height}",
                 buttonTextures[2].Width, buttonTextures[2].Height);
         }
 
@@ -326,6 +338,7 @@ private unsafe void CreateRenderingResources()
                             logger.Information("Escape pressed - exiting");
                             running = false;
                         }
+
                         break;
                 }
             }
@@ -338,7 +351,7 @@ private unsafe void CreateRenderingResources()
 
         private unsafe void Render()
         {
-            if (buttonShaderProgram == null || buttonTextures == null || 
+            if (buttonShaderProgram == null || buttonTextures == null ||
                 vertexBuffer == null || textureSampler == null)
                 return;
 
@@ -367,9 +380,10 @@ private unsafe void CreateRenderingResources()
                     RenderButtonAtIndex(pass, 0); // Button 0 (vertices 0-5) - Red tinted
                     RenderButtonAtIndex(pass, 1); // Button 1 (vertices 6-11) - Green tinted
                     RenderButtonAtIndex(pass, 2); // Button 2 (vertices 12-17) - Blue tinted
-            
+
                     EndGPURenderPass(pass);
                 }
+
                 SubmitGPUCommandBuffer(cmd);
             }
         }
@@ -378,7 +392,7 @@ private unsafe void CreateRenderingResources()
         {
             // Bind shader program
             BindGPUGraphicsPipeline(renderPass, buttonShaderProgram!.Pipeline);
-    
+
             // Bind vertex buffer
             var vertexBinding = new SDLGPUBufferBinding
             {
@@ -386,19 +400,19 @@ private unsafe void CreateRenderingResources()
                 Offset = 0
             };
             BindGPUVertexBuffers(renderPass, 0, &vertexBinding, 1);
+            BindTexture(renderPass, buttonTextures![buttonIndex]);
 
             // ✅ SOLUTION: Draw specific button using vertex offset
             // Each button uses 6 vertices (2 triangles), starting at buttonIndex * 6
             var firstVertex = (uint)(buttonIndex * 6);
             DrawGPUPrimitives(renderPass, 6, 1, firstVertex, 0);
 
-            logger.Verbose("Rendered button index: {ButtonIndex} starting at vertex {FirstVertex}", 
+            logger.Verbose("Rendered button index: {ButtonIndex} starting at vertex {FirstVertex}",
                 buttonIndex, firstVertex);
         }
 
         public void UnloadContent()
         {
-            // ✅ FIXED: Wait for any pending operations before cleanup
             lock (resourceLock)
             {
                 unsafe
@@ -409,7 +423,7 @@ private unsafe void CreateRenderingResources()
                         ReleaseGPUBuffer(device, vertexBuffer);
                         vertexBuffer = null;
                     }
-                    
+
                     if (textureSampler != null)
                     {
                         ReleaseGPUSampler(device, textureSampler);
@@ -427,14 +441,14 @@ private unsafe void CreateRenderingResources()
                     textureManager.Dispose();
                     textureManager = null;
                 }
-                
+
                 if (shaderManager != null)
                 {
                     logger.Information("Disposing shader manager");
                     shaderManager.Dispose();
                     shaderManager = null;
                 }
-                
+
                 contentLoaded = false;
             }
         }
@@ -444,12 +458,12 @@ private unsafe void CreateRenderingResources()
             if (disposing)
             {
                 logger.Information("Disposing application resources");
-                
+
                 running = false;
-                
+
                 // ✅ CRITICAL FIX: Ensure all content is unloaded before disposing device
                 UnloadContent();
-                
+
                 lock (resourceLock)
                 {
                     if (device != null)
@@ -457,14 +471,14 @@ private unsafe void CreateRenderingResources()
                         DestroyGPUDevice(device);
                         device = null;
                     }
-                    
+
                     if (window != null)
                     {
                         DestroyWindow(window);
                         window = null;
                     }
                 }
-                
+
                 Quit();
                 disposalSemaphore?.Dispose();
                 Log.CloseAndFlush();

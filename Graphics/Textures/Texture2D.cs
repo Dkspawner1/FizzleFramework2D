@@ -12,16 +12,15 @@ public class Texture2D : ITexture2D
     private static readonly ILogger logger = Log.ForContext<Texture2D>();
     private readonly unsafe SDLGPUDevice* device;
     private bool disposed;
-    
+
     public string Name { get; }
     public unsafe SDLGPUTexture* Handle { get; private set; }
     public int Width { get; }
     public int Height { get; }
     public SDLGPUTextureFormat Format { get; }
-    
+
     public bool AlphaBlendEnable { get; set; }
-    
-    public unsafe bool IsLoaded => Handle != null && disposed;
+    public unsafe bool IsLoaded => Handle != null && !disposed;
     public bool IsDisposed => disposed;
 
     public unsafe Texture2D(string name, SDLGPUDevice* device, SDLGPUTexture* handle, int width, int height,
@@ -41,13 +40,13 @@ public class Texture2D : ITexture2D
         if (!disposed)
         {
             logger.Debug("Disposing texture: {Name}", Name);
-                
+
             if (Handle != null)
             {
                 ReleaseGPUTexture(device, Handle);
                 Handle = null;
             }
-                
+
             disposed = true;
             logger.Verbose("Texture disposed: {Name}", Name);
         }

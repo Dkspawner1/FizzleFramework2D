@@ -115,7 +115,7 @@ public sealed class ShaderManager : IShaderManager
                 {
                     Code = (byte*)unmanagedCode,
                     CodeSize = (uint)bytecode.Length,
-                    Stage = stage, // Fixed: Direct assignment, no conversion needed
+                    Stage = stage, 
                     Format = SDLGPUShaderFormat.Spirv,
                     Entrypoint = (byte*)unmanagedEntryPoint // Fixed: Use correct property name
                 };
