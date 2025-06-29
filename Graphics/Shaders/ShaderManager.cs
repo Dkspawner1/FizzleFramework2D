@@ -99,191 +99,237 @@ public sealed class ShaderManager : IShaderManager
         if (bytecode.Length == 0)
             throw new InvalidOperationException($"Shader file is empty: {filePath}");
 
-        // Create SDL shader
+        // Create SDL shader with proper resource counts
         unsafe
         {
-            // Allocate unmanaged memory for bytecode
-            var unmanagedCode = Marshal.AllocHGlobal(bytecode.Length);
-            var unmanagedEntryPoint = Marshal.StringToHGlobalAnsi("main");
-
-            try
+            fixed (byte* codePtr = bytecode)
             {
-                // Copy bytecode to unmanaged memory
-                Marshal.Copy(bytecode, 0, unmanagedCode, bytecode.Length);
+                var unmanagedEntryPoint = Marshal.StringToHGlobalAnsi("main");
 
-                var createInfo = new SDLGPUShaderCreateInfo
+                try
                 {
-                    Code = (byte*)unmanagedCode,
-                    CodeSize = (uint)bytecode.Length,
-                    Stage = stage, 
-                    Format = SDLGPUShaderFormat.Spirv,
-                    Entrypoint = (byte*)unmanagedEntryPoint // Fixed: Use correct property name
+                    // CRITICAL: Specify resource counts based on shader stage and expected resources
+                    var createInfo = new SDLGPUShaderCreateInfo
+                    {
+                        CodeSize = (nuint)bytecode.Length,
+                        Code = codePtr,
+                        Stage = stage,
+                        Format = SDLGPUShaderFormat.Spirv,
+                        Entrypoint = (byte*)unmanagedEntryPoint,
+                        // FIXED: Specify resource counts for proper descriptor set layout creation
+                        NumSamplers = GetShaderSamplerCount(name, stage),
+                        NumStorageTextures = GetShaderStorageTextureCount(name, stage),
+                        NumStorageBuffers = GetShaderStorageBufferCount(name, stage),
+                        NumUniformBuffers = GetShaderUniformBufferCount(name, stage),
+                        Props = 0
+                    };
+
+                    var handle = CreateGPUShader(device, &createInfo);
+                    if (handle == null)
+                    {
+                        var error = GetError()->ToString();
+                        throw new ShaderCompilationException($"Failed to create GPU shader '{name}': {error}");
+                    }
+
+                    logger.Debug("GPU shader created successfully: {Name} with {Samplers} samplers", name, createInfo.NumSamplers);
+                    return new Shader(name, stage, device, handle, bytecode);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(unmanagedEntryPoint);
+                }
+            }
+        }
+    }
+
+    // CRITICAL: Resource count methods - these determine descriptor set layouts
+    private static uint GetShaderSamplerCount(string name, SDLGPUShaderStage stage)
+    {
+        // For your button shaders:
+        // - Vertex shaders: 0 samplers (no textures)
+        // - Fragment shaders: 1 sampler (the button texture)
+        return stage switch
+        {
+            SDLGPUShaderStage.Fragment when name.Equals("button", StringComparison.OrdinalIgnoreCase) => 1u,
+            SDLGPUShaderStage.Vertex => 0u,
+            _ => 0u
+        };
+    }
+
+    private static uint GetShaderStorageTextureCount(string name, SDLGPUShaderStage stage)
+    {
+        // Basic button rendering doesn't use storage textures
+        return 0u;
+    }
+
+    private static uint GetShaderStorageBufferCount(string name, SDLGPUShaderStage stage)
+    {
+        // Basic button rendering doesn't use storage buffers
+        return 0u;
+    }
+
+    private static uint GetShaderUniformBufferCount(string name, SDLGPUShaderStage stage)
+    {
+        // Basic button rendering doesn't use uniform buffers (using vertex attributes instead)
+        return 0u;
+    }
+
+    public async Task<IShaderProgram> CreateProgramAsync(string vertexShaderName, string fragmentShaderName)
+    {
+        if (string.IsNullOrEmpty(vertexShaderName))
+            throw new ArgumentException("Vertex shader name cannot be null or empty", nameof(vertexShaderName));
+        if (string.IsNullOrEmpty(fragmentShaderName))
+            throw new ArgumentException("Fragment shader name cannot be null or empty", nameof(fragmentShaderName));
+
+        logger.Information("Creating shader program: {Vertex} + {Fragment}", vertexShaderName, fragmentShaderName);
+
+        var programName = $"{vertexShaderName}_{fragmentShaderName}";
+        if (programs.TryGetValue(programName, out var existingProgram))
+        {
+            logger.Debug("Shader program {Name} already exists", programName);
+            return existingProgram;
+        }
+
+        try
+        {
+            // Load individual shaders
+            var vertexShader = await LoadShaderAsync(vertexShaderName, SDLGPUShaderStage.Vertex);
+            var fragmentShader = await LoadShaderAsync(fragmentShaderName, SDLGPUShaderStage.Fragment);
+
+            // Create graphics pipeline with complete configuration
+            unsafe
+            {
+                // Configure vertex input attributes (position, texcoord, color)
+                var vertexAttributes = stackalloc SDLGPUVertexAttribute[3];
+
+                vertexAttributes[0] = new SDLGPUVertexAttribute
+                {
+                    Location = 0,
+                    BufferSlot = 0,
+                    Format = SDLGPUVertexElementFormat.Float3, // vec3 position
+                    Offset = 0
                 };
 
-                var handle = CreateGPUShader(device, &createInfo);
-                if (handle == null)
+                vertexAttributes[1] = new SDLGPUVertexAttribute
+                {
+                    Location = 1,
+                    BufferSlot = 0,
+                    Format = SDLGPUVertexElementFormat.Float2, // vec2 texcoord
+                    Offset = 12 // 3 floats * 4 bytes = 12
+                };
+
+                vertexAttributes[2] = new SDLGPUVertexAttribute
+                {
+                    Location = 2,
+                    BufferSlot = 0,
+                    Format = SDLGPUVertexElementFormat.Float4, // vec4 color
+                    Offset = 20 // 12 + (2 floats * 4 bytes) = 20
+                };
+
+                var vertexBufferDescription = new SDLGPUVertexBufferDescription
+                {
+                    Slot = 0,
+                    Pitch = 36, // 3*4 + 2*4 + 4*4 = 36 bytes per vertex
+                    InputRate = SDLGPUVertexInputRate.Vertex
+                };
+
+                var vertexInputState = new SDLGPUVertexInputState
+                {
+                    VertexBufferDescriptions = &vertexBufferDescription,
+                    NumVertexBuffers = 1,
+                    VertexAttributes = vertexAttributes,
+                    NumVertexAttributes = 3
+                };
+
+                // Color target for standard RGBA rendering with alpha blending
+                var colorTargetDescription = new SDLGPUColorTargetDescription
+                {
+                    Format = SDLGPUTextureFormat.B8G8R8A8Unorm, // Match your swapchain format
+                    BlendState = new SDLGPUColorTargetBlendState
+                    {
+                        EnableBlend = 1,
+                        AlphaBlendOp = SDLGPUBlendOp.Add,
+                        ColorBlendOp = SDLGPUBlendOp.Add,
+                        ColorWriteMask = SDLGPUColorComponentFlags.R |
+                                         SDLGPUColorComponentFlags.G |
+                                         SDLGPUColorComponentFlags.B |
+                                         SDLGPUColorComponentFlags.A,
+                        SrcColorBlendfactor = SDLGPUBlendFactor.SrcAlpha,
+                        DstColorBlendfactor = SDLGPUBlendFactor.OneMinusSrcAlpha,
+                        SrcAlphaBlendfactor = SDLGPUBlendFactor.One,
+                        DstAlphaBlendfactor = SDLGPUBlendFactor.OneMinusSrcAlpha
+                    }
+                };
+
+                // Create the graphics pipeline
+                var pipelineInfo = new SDLGPUGraphicsPipelineCreateInfo
+                {
+                    VertexShader = ((Shader)vertexShader).Handle,
+                    FragmentShader = ((Shader)fragmentShader).Handle,
+                    VertexInputState = vertexInputState,
+                    PrimitiveType = SDLGPUPrimitiveType.Trianglelist,
+                    RasterizerState = new SDLGPURasterizerState
+                    {
+                        FillMode = SDLGPUFillMode.Fill,
+                        CullMode = SDLGPUCullMode.None,
+                        FrontFace = SDLGPUFrontFace.CounterClockwise,
+                        DepthBiasConstantFactor = 0,
+                        DepthBiasClamp = 0,
+                        DepthBiasSlopeFactor = 0,
+                        EnableDepthBias = 0,
+                        EnableDepthClip = 1
+                    },
+                    // FIXED: Correct multisample state for your binding version
+                    MultisampleState = new SDLGPUMultisampleState
+                    {
+                        SampleCount = SDLGPUSampleCount.Samplecount1,
+                        SampleMask = 0,      // Reserved field - must be 0
+                        EnableMask = 0,      // Reserved field - must be 0 (byte type)
+                        Padding1 = 0,        // Must be 0
+                        Padding2 = 0,        // Must be 0
+                        Padding3 = 0         // Must be 0
+                    },
+                    DepthStencilState = new SDLGPUDepthStencilState
+                    {
+                        CompareOp = SDLGPUCompareOp.Always,
+                        BackStencilState = new SDLGPUStencilOpState(),
+                        FrontStencilState = new SDLGPUStencilOpState(),
+                        CompareMask = 0,
+                        WriteMask = 0,
+                        EnableDepthTest = 0,
+                        EnableDepthWrite = 0,
+                        EnableStencilTest = 0
+                    },
+                    TargetInfo = new SDLGPUGraphicsPipelineTargetInfo
+                    {
+                        ColorTargetDescriptions = &colorTargetDescription,
+                        NumColorTargets = 1,
+                        DepthStencilFormat = SDLGPUTextureFormat.Invalid,
+                        HasDepthStencilTarget = 0
+                    },
+                    Props = 0
+                };
+
+                var pipeline = CreateGPUGraphicsPipeline(device, &pipelineInfo);
+                if (pipeline == null)
                 {
                     var error = GetError()->ToString();
-                    throw new ShaderCompilationException($"Failed to create GPU shader '{name}': {error}");
+                    throw new ShaderLinkException($"Failed to create graphics pipeline '{programName}': {error}");
                 }
 
-                logger.Debug("GPU shader created successfully: {Name}", name);
-                return new Shader(name, stage, device, handle, bytecode);
-            }
-            finally
-            {
-                // Always free unmanaged memory
-                Marshal.FreeHGlobal(unmanagedCode);
-                Marshal.FreeHGlobal(unmanagedEntryPoint);
+                var program = new ShaderProgram(programName, vertexShader, fragmentShader, device, pipeline);
+                programs[programName] = program;
+
+                logger.Information("✅ Shader program created successfully: {Name}", programName);
+                return program;
             }
         }
-    }
-
-public async Task<IShaderProgram> CreateProgramAsync(string vertexShaderName, string fragmentShaderName)
-{
-    if (string.IsNullOrEmpty(vertexShaderName))
-        throw new ArgumentException("Vertex shader name cannot be null or empty", nameof(vertexShaderName));
-    if (string.IsNullOrEmpty(fragmentShaderName))
-        throw new ArgumentException("Fragment shader name cannot be null or empty", nameof(fragmentShaderName));
-
-    logger.Information("Creating shader program: {Vertex} + {Fragment}", vertexShaderName, fragmentShaderName);
-
-    var programName = $"{vertexShaderName}_{fragmentShaderName}";
-    if (programs.TryGetValue(programName, out var existingProgram))
-    {
-        logger.Debug("Shader program {Name} already exists", programName);
-        return existingProgram;
-    }
-
-    try
-    {
-        // Load individual shaders
-        var vertexShader = await LoadShaderAsync(vertexShaderName, SDLGPUShaderStage.Vertex);
-        var fragmentShader = await LoadShaderAsync(fragmentShaderName, SDLGPUShaderStage.Fragment);
-
-        // Create graphics pipeline with complete configuration
-        unsafe
+        catch (Exception ex)
         {
-            // Configure vertex input attributes
-            var vertexAttributes = stackalloc SDLGPUVertexAttribute[3];
-            
-            vertexAttributes[0] = new SDLGPUVertexAttribute
-            {
-                Location = 0,
-                BufferSlot = 0,
-                Format = SDLGPUVertexElementFormat.Float3, // vec3 position
-                Offset = 0
-            };
-            
-            vertexAttributes[1] = new SDLGPUVertexAttribute
-            {
-                Location = 1,
-                BufferSlot = 0,
-                Format = SDLGPUVertexElementFormat.Float2, // vec2 texcoord
-                Offset = 12 // 3 floats * 4 bytes = 12
-            };
-            
-            vertexAttributes[2] = new SDLGPUVertexAttribute
-            {
-                Location = 2,
-                BufferSlot = 0,
-                Format = SDLGPUVertexElementFormat.Float4, // vec4 color
-                Offset = 20 // 12 + (2 floats * 4 bytes) = 20
-            };
-
-            var vertexBufferDescription = new SDLGPUVertexBufferDescription
-            {
-                Slot = 0,
-                Pitch = 36, // 3*4 + 2*4 + 4*4 = 36 bytes per vertex
-                InputRate = SDLGPUVertexInputRate.Vertex
-            };
-
-            var vertexInputState = new SDLGPUVertexInputState
-            {
-                VertexBufferDescriptions = &vertexBufferDescription,
-                NumVertexBuffers = 1,
-                VertexAttributes = vertexAttributes,
-                NumVertexAttributes = 3
-            };
-
-            // ✅ CRITICAL FIX: Add color target descriptions to match render pass
-            var colorTargetDescription = new SDLGPUColorTargetDescription
-            {
-                Format = SDLGPUTextureFormat.B8G8R8A8Unorm, // ✅ Match your swapchain format
-                BlendState = new SDLGPUColorTargetBlendState
-                {
-                    EnableBlend = 1,
-                    AlphaBlendOp = SDLGPUBlendOp.Add,
-                    ColorBlendOp = SDLGPUBlendOp.Add,
-                    ColorWriteMask = SDLGPUColorComponentFlags.R | 
-                                   SDLGPUColorComponentFlags.G | 
-                                   SDLGPUColorComponentFlags.B | 
-                                   SDLGPUColorComponentFlags.A,
-                    SrcColorBlendfactor = SDLGPUBlendFactor.SrcAlpha,
-                    DstColorBlendfactor = SDLGPUBlendFactor.OneMinusSrcAlpha,
-                    SrcAlphaBlendfactor= SDLGPUBlendFactor.One,
-                    DstAlphaBlendfactor = SDLGPUBlendFactor.OneMinusSrcAlpha
-                }
-            };
-
-            var pipelineInfo = new SDLGPUGraphicsPipelineCreateInfo
-            {
-                VertexShader = ((Shader)vertexShader).Handle,
-                FragmentShader = ((Shader)fragmentShader).Handle,
-                
-                // Add vertex input state
-                VertexInputState = vertexInputState,
-                
-                PrimitiveType = SDLGPUPrimitiveType.Trianglelist,
-
-                RasterizerState = new SDLGPURasterizerState
-                {
-                    FillMode = SDLGPUFillMode.Fill,
-                    CullMode = SDLGPUCullMode.None, // No culling for UI elements
-                    FrontFace = SDLGPUFrontFace.CounterClockwise
-                },
-
-                MultisampleState = new SDLGPUMultisampleState
-                {
-                    SampleCount = SDLGPUSampleCount.Samplecount1,
-                    SampleMask = 0 // Correct value as you discovered
-                },
-                TargetInfo =
-                {
-                    ColorTargetDescriptions =&colorTargetDescription, 
-                    NumColorTargets = 1,
-                },
-                DepthStencilState = new SDLGPUDepthStencilState
-                {
-                    CompareOp = SDLGPUCompareOp.Always,
-                    BackStencilState = new SDLGPUStencilOpState(),
-                    FrontStencilState = new SDLGPUStencilOpState(),
-                    CompareMask = 0,
-                    WriteMask = 0
-                }
-            };
-            
-
-            var pipeline = CreateGPUGraphicsPipeline(device, &pipelineInfo);
-            if (pipeline == null)
-            {
-                var error = GetError()->ToString();
-                throw new ShaderLinkException($"Failed to create graphics pipeline '{programName}': {error}");
-            }
-
-            var program = new ShaderProgram(programName, vertexShader, fragmentShader, device, pipeline);
-            programs[programName] = program;
-
-            logger.Information("✅ Shader program created successfully: {Name}", programName);
-            return program;
+            logger.Error(ex, "❌ Failed to create shader program: {Name}", programName);
+            throw;
         }
     }
-    catch (Exception ex)
-    {
-        logger.Error(ex, "❌ Failed to create shader program: {Name}", programName);
-        throw;
-    }
-}
 
     public IShader? GetShader(string name)
     {

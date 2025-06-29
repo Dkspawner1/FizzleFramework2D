@@ -5,21 +5,28 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <Optimize>true</Optimize>
         <DebugType>portable</DebugType>
-        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
         <PlatformTarget>x64</PlatformTarget>
+        <LangVersion>12.0</LangVersion>
+        <EnablePreviewFeatures>false</EnablePreviewFeatures>
         <InvariantGlobalization>true</InvariantGlobalization>
-        <EnablePreviewFeatures>true</EnablePreviewFeatures>
-        <LangVersion>preview</LangVersion>
+        <TieredCompilation>true</TieredCompilation>
     </PropertyGroup>
 
-    <!-- Hexa.NET SDL3 - Latest and most stable -->
+    <!-- Only set RuntimeIdentifier for Release builds to avoid NETSDK1112 in Debug -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <SelfContained>false</SelfContained>
+        <PublishReadyToRun>true</PublishReadyToRun>
+        <PublishSingleFile>false</PublishSingleFile>
+    </PropertyGroup>
+
+    <!-- SDL3 packages -->
     <ItemGroup>
         <PackageReference Include="Hexa.NET.SDL3" Version="1.2.16" />
         <PackageReference Include="Hexa.NET.SDL3.Image" Version="1.0.0" />
-<!--        <PackageReference Include="Hexa.NET.SDL3.TTF" Version="1.0.0" />-->
     </ItemGroup>
 
-    <!-- Modern Logging - Serilog is best for games -->
+    <!-- Logging packages -->
     <ItemGroup>
         <PackageReference Include="Serilog" Version="4.0.0" />
         <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
@@ -29,19 +36,15 @@
         <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
     </ItemGroup>
 
-    <!-- Performance & Diagnostics -->
+    <!-- Performance packages -->
     <ItemGroup>
         <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.0.0" />
         <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="9.0.0" />
-    </ItemGroup>
-
-    <!-- Memory Management -->
-    <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     </ItemGroup>
 
-    <!-- Your existing shader compilation -->
+    <!-- Shader compilation -->
     <ItemGroup>
         <ShaderSource Include="assets\shaders\**\*.vert;assets\shaders\**\*.frag">
             <OutFilename>%(Filename)%(Extension).spv</OutFilename>
@@ -49,13 +52,15 @@
     </ItemGroup>
     <Target Name="CompileShaders" BeforeTargets="BeforeBuild" Inputs="@(ShaderSource)" Outputs="@(ShaderSource->'$(OutputPath)assets\shaders\%(OutFilename)')">
         <MakeDir Directories="$(OutputPath)assets\shaders" />
-        <Exec Command="C:/msys64/ucrt64/bin/glslangValidator.exe -V &quot;%(ShaderSource.FullPath)&quot; -o &quot;$(OutputPath)assets\shaders\%(OutFilename)&quot;" ContinueOnError="false">
+        <!-- Use only supported flags: -V -target-env vulkan1.1 -Os -->
+        <Exec Command="C:/msys64/ucrt64/bin/glslangValidator.exe -V --target-env vulkan1.1 -Os &quot;%(ShaderSource.FullPath)&quot; -o &quot;$(OutputPath)assets\shaders\%(OutFilename)&quot;" ContinueOnError="false">
             <Output TaskParameter="ExitCode" PropertyName="ShaderCompileResult" />
         </Exec>
         <Error Text="Shader compilation failed for %(ShaderSource.Identity). See GLSL errors above." Condition="'$(ShaderCompileResult)' != '0'" />
-        <Message Text="Compiled shader: %(ShaderSource.Filename)%(ShaderSource.Extension) → assets/shaders/%(OutFilename)" Importance="high" />
+        <Message Text="✅ Compiled shader: %(ShaderSource.Filename)%(ShaderSource.Extension) → assets/shaders/%(OutFilename)" Importance="high" />
     </Target>
 
+    <!-- Asset copying -->
     <ItemGroup>
         <Content Include="assets\textures\**\*" CopyToOutputDirectory="PreserveNewest" />
         <Content Include="runtimes\**\*" CopyToOutputDirectory="PreserveNewest" />
