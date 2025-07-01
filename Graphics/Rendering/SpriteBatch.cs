@@ -25,7 +25,7 @@ public unsafe class SpriteBatch : IDisposable
     private SDLGPUTransferBuffer* stagingBuffer;
     
     private const int MaxSpritesPerBatch = 1000;
-    private const int VerticesPerSprite = 6;  // FIXED: 6 vertices for triangle list
+    private const int VerticesPerSprite = 6;  // CRITICAL: 6 vertices for triangle list
     private const int FloatsPerVertex = 9;   // pos(3) + uv(2) + color(4)
     
     private bool isBegun = false;
@@ -59,7 +59,7 @@ public unsafe class SpriteBatch : IDisposable
         if (!isBegun)
             throw new InvalidOperationException("SpriteBatch.Draw called before Begin");
 
-        // FIXED: Remove unused texture parameter from CreateSpriteData call
+        // Create sprite data for this draw call
         var sprite = CreateSpriteData(destinationRectangle, tint);
     
         // Group by texture for efficient batching
@@ -74,10 +74,35 @@ public unsafe class SpriteBatch : IDisposable
         if (!isBegun)
             throw new InvalidOperationException("SpriteBatch.End called before Begin");
 
-        // Render all texture batches
+        // FIXED: Accumulate all sprites into single buffer upload
+        var allSprites = new List<SpriteData>();
+        var drawCalls = new List<(ITexture2D texture, int startVertex, int spriteCount)>();
+    
+        int currentVertexOffset = 0;
+    
         foreach (var batch in textureBatches)
         {
-            RenderTextureBatch(renderPass, batch.Key, batch.Value);
+            var texture = batch.Key;
+            var sprites = batch.Value;
+        
+            // Record draw call info with proper vertex offset
+            drawCalls.Add((texture, currentVertexOffset, sprites.Count));
+        
+            // Add sprites to combined list
+            allSprites.AddRange(sprites);
+            currentVertexOffset += sprites.Count * VerticesPerSprite;
+        }
+    
+        // Upload ALL sprite data in one operation
+        if (allSprites.Count > 0)
+        {
+            UploadAllSpriteData(allSprites.ToArray());
+        
+            // Execute draw calls with proper vertex offsets
+            foreach (var (texture, startVertex, spriteCount) in drawCalls)
+            {
+                DrawBatchWithOffset(renderPass, texture, startVertex, spriteCount);
+            }
         }
 
         isBegun = false;
@@ -88,7 +113,7 @@ public unsafe class SpriteBatch : IDisposable
     #region Private Implementation Methods
 
     /// <summary>
-    /// Creates the dynamic vertex buffer and staging buffer for sprite batching[2][7].
+    /// Creates the dynamic vertex buffer and staging buffer for sprite batching.
     /// </summary>
     private void CreateBuffers()
     {
@@ -107,7 +132,7 @@ public unsafe class SpriteBatch : IDisposable
         if (dynamicVertexBuffer == null)
             throw new InvalidOperationException($"Failed to create dynamic vertex buffer: {GetError()->ToString()}");
 
-        // Create staging buffer for CPU->GPU uploads[12][15]
+        // Create staging buffer for CPU->GPU uploads
         var stagingBufferInfo = new SDLGPUTransferBufferCreateInfo
         {
             Usage = SDLGPUTransferBufferUsage.Upload,
@@ -120,9 +145,9 @@ public unsafe class SpriteBatch : IDisposable
     }
 
     /// <summary>
-    /// Creates sprite vertex data with proper UV coordinates for SDL3 GPU[18][19].
+    /// Creates sprite vertex data with proper UV coordinates for SDL3 GPU.
     /// </summary>
-    private SpriteData CreateSpriteData(Rectangle dest, Vector4 tint)  // Removed unused texture parameter
+    private SpriteData CreateSpriteData(Rectangle dest, Vector4 tint)
     {
         float px = dest.X, py = dest.Y;
         float pw = dest.Width, ph = dest.Height;
@@ -131,35 +156,35 @@ public unsafe class SpriteBatch : IDisposable
         // Convert to NDC
         float x0 = (px / w) * 2f - 1f;      // left
         float x1 = ((px + pw) / w) * 2f - 1f; // right
-        float y0 = 1f - (py / h) * 2f;      // top (NDC +Y up)
+        float y0 = 1f - (py / h) * 2f;      // top
         float y1 = 1f - ((py + ph) / h) * 2f; // bottom
 
-        // FIXED: Use standard top-left origin UV coordinates
-        // Your shader will flip the Y, so provide UVs as if (0,0) is top-left
+        // FIXED: Create 6 vertices for triangle list with correct UV coordinates
         return new SpriteData
         {
             Vertices = new[]
             {
-                // Triangle 1: counter-clockwise winding
+                // Triangle 1: top-left, bottom-left, top-right
                 x0, y0, 0f, 0f, 0f, tint.X, tint.Y, tint.Z, tint.W, // top-left: UV (0,0)
                 x0, y1, 0f, 0f, 1f, tint.X, tint.Y, tint.Z, tint.W, // bottom-left: UV (0,1)
                 x1, y0, 0f, 1f, 0f, tint.X, tint.Y, tint.Z, tint.W, // top-right: UV (1,0)
             
-                // Triangle 2: counter-clockwise winding
+                // Triangle 2: top-right, bottom-left, bottom-right
                 x1, y0, 0f, 1f, 0f, tint.X, tint.Y, tint.Z, tint.W, // top-right: UV (1,0)
                 x0, y1, 0f, 0f, 1f, tint.X, tint.Y, tint.Z, tint.W, // bottom-left: UV (0,1)
                 x1, y1, 0f, 1f, 1f, tint.X, tint.Y, tint.Z, tint.W  // bottom-right: UV (1,1)
             }
         };
     }
+
     /// <summary>
-    /// Uploads sprite vertex data to GPU using efficient memory copying[11][17].
+    /// Uploads ALL sprite vertex data to GPU in one operation - FIXED to prevent overwriting.
     /// </summary>
-    private void UploadSpriteData(SpriteData[] sprites)
+    private void UploadAllSpriteData(SpriteData[] sprites)
     {
         if (sprites.Length == 0) return;
 
-        // Calculate total data size
+        // Calculate total data size for ALL sprites
         int totalVertices = sprites.Length * VerticesPerSprite;
         int totalFloats = totalVertices * FloatsPerVertex;
         uint dataSize = (uint)(totalFloats * sizeof(float));
@@ -171,7 +196,7 @@ public unsafe class SpriteBatch : IDisposable
 
         try
         {
-            // Copy all sprite vertex data to staging buffer
+            // Copy ALL sprite vertex data to staging buffer sequentially
             int offset = 0;
             for (int i = 0; i < sprites.Length; i++)
             {
@@ -190,7 +215,7 @@ public unsafe class SpriteBatch : IDisposable
             UnmapGPUTransferBuffer(device, stagingBuffer);
         }
 
-        // Transfer from staging buffer to GPU vertex buffer[12][15]
+        // Transfer from staging buffer to GPU vertex buffer
         var cmd = AcquireGPUCommandBuffer(device);
         var copyPass = BeginGPUCopyPass(cmd);
 
@@ -203,7 +228,7 @@ public unsafe class SpriteBatch : IDisposable
         var dstRegion = new SDLGPUBufferRegion 
         { 
             Buffer = dynamicVertexBuffer, 
-            Offset = 0, 
+            Offset = 0,  // Start at beginning of buffer
             Size = dataSize 
         };
 
@@ -214,48 +239,32 @@ public unsafe class SpriteBatch : IDisposable
     }
 
     /// <summary>
-    /// Renders a batch of sprites with the same texture in a single draw call[21][24].
+    /// FIXED: Draw batch with proper vertex buffer offset to prevent rendering conflicts.
     /// </summary>
-    private void DrawBatch(SDLGPURenderPass* renderPass, ITexture2D texture, int spriteCount)
+    private void DrawBatchWithOffset(SDLGPURenderPass* renderPass, ITexture2D texture, int startVertex, int spriteCount)
     {
         // Bind graphics pipeline
         BindGPUGraphicsPipeline(renderPass, shaderProgram.Pipeline);
 
-        // FIXED: Use lowercase field names
+        // CRITICAL FIX: Use lowercase field names for SDL3 GPU structures
         var vertexBinding = new SDLGPUBufferBinding 
         { 
-            Buffer = dynamicVertexBuffer,  
-            Offset = 0                     
+            Buffer = dynamicVertexBuffer,  // ✅ lowercase 'buffer'
+            Offset = (uint)(startVertex * FloatsPerVertex * sizeof(float))  // ✅ lowercase 'offset' with proper calculation
         };
         BindGPUVertexBuffers(renderPass, 0, &vertexBinding, 1);
 
-        // FIXED: Use lowercase field names
+        // CRITICAL FIX: Use lowercase field names for texture binding
         var textureSamplerBinding = new SDLGPUTextureSamplerBinding
         {
-            Texture = texture.Handle,  
-            Sampler = sampler          
+            Texture = texture.Handle,  // ✅ lowercase 'texture'
+            Sampler = sampler         // ✅ lowercase 'sampler'
         };
         BindGPUFragmentSamplers(renderPass, 0, &textureSamplerBinding, 1);
 
-        // FIXED: Now uses correct vertex count (6 per sprite)
+        // Draw this batch's sprites with correct vertex count
         uint totalVertices = (uint)(spriteCount * VerticesPerSprite);
         DrawGPUPrimitives(renderPass, totalVertices, 1, 0, 0);
-    }
-
-    /// <summary>
-    /// Renders a batch of sprites with efficient sub-batching for large sprite counts[6][22].
-    /// </summary>
-    private void RenderTextureBatch(SDLGPURenderPass* renderPass, ITexture2D texture, List<SpriteData> sprites)
-    {
-        // Process sprites in chunks to avoid exceeding buffer limits
-        for (int i = 0; i < sprites.Count; i += MaxSpritesPerBatch)
-        {
-            int spritesToDraw = Math.Min(MaxSpritesPerBatch, sprites.Count - i);
-            var spritesSlice = sprites.Skip(i).Take(spritesToDraw).ToArray();
-            
-            UploadSpriteData(spritesSlice);
-            DrawBatch(renderPass, texture, spritesToDraw);
-        }
     }
 
     #endregion
