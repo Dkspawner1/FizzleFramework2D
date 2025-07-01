@@ -159,20 +159,20 @@ public unsafe class SpriteBatch : IDisposable
         float y0 = 1f - (py / h) * 2f;      // top
         float y1 = 1f - ((py + ph) / h) * 2f; // bottom
 
-        // FIXED: Create 6 vertices for triangle list with correct UV coordinates
+        // FIXED: Correct UV coordinates for shader Y-flip
         return new SpriteData
         {
             Vertices = new[]
             {
                 // Triangle 1: top-left, bottom-left, top-right
-                x0, y0, 0f, 0f, 0f, tint.X, tint.Y, tint.Z, tint.W, // top-left: UV (0,0)
-                x0, y1, 0f, 0f, 1f, tint.X, tint.Y, tint.Z, tint.W, // bottom-left: UV (0,1)
-                x1, y0, 0f, 1f, 0f, tint.X, tint.Y, tint.Z, tint.W, // top-right: UV (1,0)
+                x0, y0, 0f, 0f, 1f, tint.X, tint.Y, tint.Z, tint.W, // top-left: UV (0,1) - CHANGED
+                x0, y1, 0f, 0f, 0f, tint.X, tint.Y, tint.Z, tint.W, // bottom-left: UV (0,0) - CHANGED
+                x1, y0, 0f, 1f, 1f, tint.X, tint.Y, tint.Z, tint.W, // top-right: UV (1,1) - CHANGED
             
                 // Triangle 2: top-right, bottom-left, bottom-right
-                x1, y0, 0f, 1f, 0f, tint.X, tint.Y, tint.Z, tint.W, // top-right: UV (1,0)
-                x0, y1, 0f, 0f, 1f, tint.X, tint.Y, tint.Z, tint.W, // bottom-left: UV (0,1)
-                x1, y1, 0f, 1f, 1f, tint.X, tint.Y, tint.Z, tint.W  // bottom-right: UV (1,1)
+                x1, y0, 0f, 1f, 1f, tint.X, tint.Y, tint.Z, tint.W, // top-right: UV (1,1) - CHANGED
+                x0, y1, 0f, 0f, 0f, tint.X, tint.Y, tint.Z, tint.W, // bottom-left: UV (0,0) - CHANGED
+                x1, y1, 0f, 1f, 0f, tint.X, tint.Y, tint.Z, tint.W  // bottom-right: UV (1,0) - CHANGED
             }
         };
     }
