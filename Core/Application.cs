@@ -76,7 +76,7 @@ public sealed class Application : IApplication
     // Dynamic button management
     private readonly List<Button> buttons = [];
     private Vector2 mousePosition;
-    private bool isMousePressed = false;
+    private bool isMousePressed ;
 
     // State
     private volatile bool running;
@@ -90,7 +90,6 @@ public sealed class Application : IApplication
     public static readonly Vector4 NormalTint = new(1f, 1f, 1f, 1f); // White (normal)
     public static readonly Vector4 HoverTint = new(0.8f, 0.8f, 0.8f, 1f); // Light gray (hover)
     public static readonly Vector4 PressedTint = new(0.6f, 0.6f, 0.6f, 1f); // Dark gray (pressed)
-
     #endregion
 
     public bool IsInitialized => initialized;
@@ -145,7 +144,6 @@ public sealed class Application : IApplication
 
             CreateDefaultSampler();
             CreateManagers();
-            CreateRenderingResources();
 
             initialized = true;
             logger.Information("Initialization complete");
@@ -254,80 +252,6 @@ public sealed class Application : IApplication
 
     #endregion
 
-    #region GPU Resources (Legacy - Can be removed once fully migrated to SpriteBatch)
-
-    private unsafe void CreateRenderingResources()
-    {
-        logger.Information("Creating legacy vertex buffer for static buttons…");
-
-        // Keep only for legacy compatibility - can be removed once fully migrated to SpriteBatch
-        float[] vertices =
-        {
-            // Button 0
-            -0.8f, -0.3f, 0f, 0f, 0f, 1f, 1f, 1f, 1f,
-            -0.2f, -0.3f, 0f, 1f, 0f, 1f, 1f, 1f, 1f,
-            -0.2f, 0.3f, 0f, 1f, 1f, 1f, 1f, 1f, 1f,
-            -0.8f, -0.3f, 0f, 0f, 0f, 1f, 1f, 1f, 1f,
-            -0.2f, 0.3f, 0f, 1f, 1f, 1f, 1f, 1f, 1f,
-            -0.8f, 0.3f, 0f, 0f, 1f, 1f, 1f, 1f, 1f,
-
-            // Button 1
-            -0.3f, -0.3f, 0f, 0f, 0f, 1f, 1f, 1f, 1f,
-            0.3f, -0.3f, 0f, 1f, 0f, 1f, 1f, 1f, 1f,
-            0.3f, 0.3f, 0f, 1f, 1f, 1f, 1f, 1f, 1f,
-            -0.3f, -0.3f, 0f, 0f, 0f, 1f, 1f, 1f, 1f,
-            0.3f, 0.3f, 0f, 1f, 1f, 1f, 1f, 1f, 1f,
-            -0.3f, 0.3f, 0f, 0f, 1f, 1f, 1f, 1f, 1f,
-
-            // Button 2
-            0.2f, -0.3f, 0f, 0f, 0f, 1f, 1f, 1f, 1f,
-            0.8f, -0.3f, 0f, 1f, 0f, 1f, 1f, 1f, 1f,
-            0.8f, 0.3f, 0f, 1f, 1f, 1f, 1f, 1f, 1f,
-            0.2f, -0.3f, 0f, 0f, 0f, 1f, 1f, 1f, 1f,
-            0.8f, 0.3f, 0f, 1f, 1f, 1f, 1f, 1f, 1f,
-            0.2f, 0.3f, 0f, 0f, 1f, 1f, 1f, 1f, 1f,
-        };
-
-        uint vertexDataSize = (uint)(vertices.Length * sizeof(float));
-        var vbCreateInfo = new SDLGPUBufferCreateInfo
-        {
-            Usage = SDLGPUBufferUsageFlags.Vertex,
-            Size = vertexDataSize
-        };
-
-        vertexBuffer = CreateGPUBuffer(device, &vbCreateInfo);
-        if (vertexBuffer == null)
-            throw new InvalidOperationException("Failed to create button vertex buffer.");
-
-        // Upload vertex data
-        var stagingCreateInfo = new SDLGPUTransferBufferCreateInfo
-        {
-            Usage = SDLGPUTransferBufferUsage.Upload,
-            Size = vertexDataSize
-        };
-
-        var staging = CreateGPUTransferBuffer(device, &stagingCreateInfo);
-        if (staging == null)
-            throw new InvalidOperationException("Failed to create staging buffer for button vertices.");
-
-        float* dst = (float*)MapGPUTransferBuffer(device, staging, false);
-        fixed (float* src = vertices)
-            Buffer.MemoryCopy(src, dst, vertexDataSize, vertexDataSize);
-        UnmapGPUTransferBuffer(device, staging);
-
-        var cmd = AcquireGPUCommandBuffer(device);
-        var copy = BeginGPUCopyPass(cmd);
-        var srcLoc = new SDLGPUTransferBufferLocation { TransferBuffer = staging, Offset = 0 };
-        var dstReg = new SDLGPUBufferRegion { Buffer = vertexBuffer, Offset = 0, Size = vertexDataSize };
-        UploadToGPUBuffer(copy, &srcLoc, &dstReg, false);
-        EndGPUCopyPass(copy);
-        SubmitGPUCommandBuffer(cmd);
-        WaitForGPUIdle(device);
-        ReleaseGPUTransferBuffer(device, staging);
-    }
-
-    #endregion
-
     #region Button Management System
 
     /// <summary>
@@ -342,9 +266,9 @@ public sealed class Application : IApplication
         // Calculate button layout
         var buttonWidth = buttonTextures[0].Width / 4;
         var buttonHeight = buttonTextures[0].Height / 4;
-        var buttonSpacing = 50;
-        var startX = 100;
-        var startY = 200;
+        const int buttonSpacing = 50;
+        const int startX = 100;
+        const int startY = 200;
 
         // Create button objects with proper bounds
         for (int i = 0; i < buttonTextures.Length; i++)
