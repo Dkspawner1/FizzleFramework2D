@@ -159,7 +159,7 @@ public sealed class Application : IApplication
     }
 
     private unsafe bool IsWindowMinimized() => (GetWindowFlags(window) & SDLWindowFlags.Minimized) != 0;
-    
+
     private unsafe void CreateManagers()
     {
         shaderManager = new ShaderManager(device, settings);
@@ -216,6 +216,9 @@ public sealed class Application : IApplication
         }
     }
 
+    // TEMP TEST TEXTURE:
+    private ITexture2D? backgroundTexture;
+
     private async Task LoadContentAsync()
     {
         if (shaderManager == null || textureManager == null)
@@ -227,6 +230,9 @@ public sealed class Application : IApplication
         buttonProgram = await shaderManager.CreateProgramAsync("button", "button");
 
         // Load textures
+
+        backgroundTexture = await textureManager.LoadTextureAsync("backgrounds/origbig.png");
+
         buttonTextures =
         [
             await textureManager.LoadTextureAsync("btn0.png"),
@@ -485,7 +491,7 @@ public sealed class Application : IApplication
     {
         if (buttonProgram == null || buttonTextures == null || spriteBatch == null)
             return;
-    
+
         // FIXED: Use the boolean function directly, no bitwise operation needed
         if (IsWindowMinimized()) // Bail out early, nothing to draw
             return;
@@ -494,9 +500,9 @@ public sealed class Application : IApplication
         {
             SDLGPUTexture* backbuffer;
             uint w, h;
-            var cmd = AcquireGPUCommandBuffer((SDLGPUDevice*)device);
-        
-            if (!WaitAndAcquireGPUSwapchainTexture(cmd, (SDLWindow*)window, &backbuffer, &w, &h))
+            var cmd = AcquireGPUCommandBuffer(device);
+
+            if (!WaitAndAcquireGPUSwapchainTexture(cmd, window, &backbuffer, &w, &h))
             {
                 // Could not get a back-buffer this frame
                 SubmitGPUCommandBuffer(cmd);
@@ -534,6 +540,7 @@ public sealed class Application : IApplication
             SubmitGPUCommandBuffer(cmd);
         }
     }
+
     /// <summary>
     /// Dynamic UI drawing using SpriteBatch with real-time button state management
     /// </summary>
@@ -545,10 +552,11 @@ public sealed class Application : IApplication
             return;
         }
 
+        spriteBatch.Draw(backgroundTexture, new Rectangle(0, 0, 1600, 900), new(1f, 1f, 1f, 1f));
         // Draw all buttons with their current dynamic states
         foreach (var button in buttons)
         {
-            Vector4 tint = button.GetTintColor(); // Gets color based on current state
+            var tint = button.GetTintColor(); // Gets color based on current state
             spriteBatch!.Draw(button.Texture, button.Bounds, tint);
         }
 
