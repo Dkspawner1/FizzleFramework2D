@@ -158,9 +158,8 @@ public sealed class Application : IApplication
         }
     }
 
-    private unsafe SDLWindowFlags IsWindowMinimized() =>
-        (GetWindowFlags(window) & SDLWindowFlags.Minimized); 
-
+    private unsafe bool IsWindowMinimized() => (GetWindowFlags(window) & SDLWindowFlags.Minimized) != 0;
+    
     private unsafe void CreateManagers()
     {
         shaderManager = new ShaderManager(device, settings);
@@ -486,17 +485,30 @@ public sealed class Application : IApplication
     {
         if (buttonProgram == null || buttonTextures == null || spriteBatch == null)
             return;
-        
-        if ((IsWindowMinimized() & SDLWindowFlags.Minimized) != 0) // Bail out early, nothing to draw
+    
+        // FIXED: Use the boolean function directly, no bitwise operation needed
+        if (IsWindowMinimized()) // Bail out early, nothing to draw
             return;
 
         lock (renderLock)
         {
             SDLGPUTexture* backbuffer;
             uint w, h;
-            var cmd = AcquireGPUCommandBuffer(device);
-            if (!WaitAndAcquireGPUSwapchainTexture(cmd, window, &backbuffer, &w, &h))
+            var cmd = AcquireGPUCommandBuffer((SDLGPUDevice*)device);
+        
+            if (!WaitAndAcquireGPUSwapchainTexture(cmd, (SDLWindow*)window, &backbuffer, &w, &h))
+            {
+                // Could not get a back-buffer this frame
+                SubmitGPUCommandBuffer(cmd);
                 return;
+            }
+
+            // ADDED: Extra safety check for 0x0 surface or null backbuffer
+            if (backbuffer == null || w == 0 || h == 0)
+            {
+                SubmitGPUCommandBuffer(cmd);
+                return;
+            }
 
             var target = new SDLGPUColorTargetInfo
             {
@@ -512,7 +524,7 @@ public sealed class Application : IApplication
                 // Use SpriteBatch for all rendering
                 spriteBatch.Begin();
 
-                // Draw dynamic interactive buttons
+                // Draw dynamic interactive buttons - PRESERVED
                 DrawUIElements();
 
                 spriteBatch.End(pass);
@@ -522,7 +534,6 @@ public sealed class Application : IApplication
             SubmitGPUCommandBuffer(cmd);
         }
     }
-
     /// <summary>
     /// Dynamic UI drawing using SpriteBatch with real-time button state management
     /// </summary>
