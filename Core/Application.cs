@@ -158,6 +158,9 @@ public sealed class Application : IApplication
         }
     }
 
+    private unsafe SDLWindowFlags IsWindowMinimized() =>
+        (GetWindowFlags(window) & SDLWindowFlags.Minimized); 
+
     private unsafe void CreateManagers()
     {
         shaderManager = new ShaderManager(device, settings);
@@ -225,12 +228,12 @@ public sealed class Application : IApplication
         buttonProgram = await shaderManager.CreateProgramAsync("button", "button");
 
         // Load textures
-        buttonTextures = new[]
-        {
+        buttonTextures =
+        [
             await textureManager.LoadTextureAsync("btn0.png"),
             await textureManager.LoadTextureAsync("btn1.png"),
             await textureManager.LoadTextureAsync("btn2.png")
-        };
+        ];
 
         unsafe
         {
@@ -332,11 +335,11 @@ public sealed class Application : IApplication
         buttons.Clear();
 
         // Calculate button layout
-        int buttonWidth = buttonTextures[0].Width / 4;
-        int buttonHeight = buttonTextures[0].Height / 4;
-        int buttonSpacing = 50;
-        int startX = 100;
-        int startY = 200;
+        var buttonWidth = buttonTextures[0].Width / 4;
+        var buttonHeight = buttonTextures[0].Height / 4;
+        var buttonSpacing = 50;
+        var startX = 100;
+        var startY = 200;
 
         // Create button objects with proper bounds
         for (int i = 0; i < buttonTextures.Length; i++)
@@ -361,20 +364,14 @@ public sealed class Application : IApplication
     {
         foreach (var button in buttons)
         {
-            bool isMouseOver = IsPointInRectangle(mousePosition, button.Bounds);
+            var isMouseOver = IsPointInRectangle(mousePosition, button.Bounds);
 
-            if (isMouseOver && isMousePressed)
+            button.State = isMouseOver switch
             {
-                button.State = ButtonState.Pressed;
-            }
-            else if (isMouseOver)
-            {
-                button.State = ButtonState.Hovered;
-            }
-            else
-            {
-                button.State = ButtonState.Normal;
-            }
+                true when isMousePressed => ButtonState.Pressed,
+                true => ButtonState.Hovered,
+                _ => ButtonState.Normal
+            };
         }
     }
 
@@ -454,9 +451,6 @@ public sealed class Application : IApplication
             switch ((SDLEventType)e.Type)
             {
                 case SDLEventType.Quit:
-                    running = false;
-                    break;
-
                 case SDLEventType.KeyDown when e.Key.Key == SDLK_ESCAPE:
                     running = false;
                     break;
@@ -491,6 +485,9 @@ public sealed class Application : IApplication
     private unsafe void Render()
     {
         if (buttonProgram == null || buttonTextures == null || spriteBatch == null)
+            return;
+        
+        if ((IsWindowMinimized() & SDLWindowFlags.Minimized) != 0) // Bail out early, nothing to draw
             return;
 
         lock (renderLock)
