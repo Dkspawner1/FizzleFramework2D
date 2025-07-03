@@ -74,7 +74,7 @@ public sealed class Application : IApplication
     private unsafe SDLGPUBuffer* vertexBuffer;
 
     // Dynamic button management
-    private readonly List<Button> buttons = new();
+    private readonly List<Button> buttons = [];
     private Vector2 mousePosition;
     private bool isMousePressed = false;
 
@@ -100,7 +100,7 @@ public sealed class Application : IApplication
     public Application(GameSettings settings)
     {
         this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        logger.Debug("Application instance constructed.");
+        logger.Debug("Application instance constructed");
     }
 
     #region Initialization / Shutdown
@@ -135,7 +135,7 @@ public sealed class Application : IApplication
 
             if (!ClaimWindowForGPUDevice(device, window))
             {
-                logger.Error("SDL_ClaimWindowForGPUDevice failed.");
+                logger.Error("SDL_ClaimWindowForGPUDevice failed");
                 return false;
             }
 
@@ -148,12 +148,12 @@ public sealed class Application : IApplication
             CreateRenderingResources();
 
             initialized = true;
-            logger.Information("Initialization complete.");
+            logger.Information("Initialization complete");
             return true;
         }
         catch (Exception ex)
         {
-            logger.Fatal(ex, "Initialization exception.");
+            logger.Fatal(ex, "Initialization exception");
             return false;
         }
     }
@@ -196,7 +196,7 @@ public sealed class Application : IApplication
     {
         if (!initialized)
         {
-            logger.Warning("LoadContent called before Initialize.");
+            logger.Warning("LoadContent called before Initialize");
             return;
         }
 
@@ -205,11 +205,11 @@ public sealed class Application : IApplication
         {
             LoadContentAsync().Wait();
             contentLoaded = true;
-            logger.Information("Content loaded.");
+            logger.Information("Content loaded");
         }
         catch (Exception ex)
         {
-            logger.Fatal(ex, "Content loading failed.");
+            logger.Fatal(ex, "Content loading failed");
             throw;
         }
     }
@@ -429,12 +429,12 @@ public sealed class Application : IApplication
     {
         if (!initialized || !contentLoaded)
         {
-            logger.Error("Run called without initialization or content.");
+            logger.Error("Run called without initialization or content");
             return;
         }
 
         running = true;
-        logger.Information("Entering main loop.");
+        logger.Information("Entering main loop");
         while (running)
         {
             PollEvents();
@@ -608,24 +608,20 @@ public sealed class Application : IApplication
             device = null;
         }
 
-        if (window != null)
-        {
-            DestroyWindow(window);
-            window = null;
-        }
+        if (window == null) return;
+        DestroyWindow(window);
+        window = null;
     }
 
     private void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            running = false;
-            UnloadContent();
-            DestroyDeviceAndWindow();
-            Quit();
-            disposalSem.Dispose();
-            Log.CloseAndFlush();
-        }
+        if (!disposing) return;
+        running = false;
+        UnloadContent();
+        DestroyDeviceAndWindow();
+        Quit();
+        disposalSem.Dispose();
+        Log.CloseAndFlush();
     }
 
     public void Dispose()
