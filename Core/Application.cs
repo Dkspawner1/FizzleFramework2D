@@ -1,6 +1,7 @@
 ﻿#nullable enable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -313,37 +314,31 @@ public sealed class Application : IApplication
                point.Y >= rect.Y && point.Y <= rect.Y + rect.Height;
     }
 
+    
     /// <summary>
     /// Handle button click events and trigger appropriate actions
     /// </summary>
     private void HandleButtonClick()
     {
-        foreach (var button in buttons)
+        // ❶  Find the first button under the mouse (or null if none)
+        var hit = buttons.FirstOrDefault(
+            b => IsPointInRectangle(mousePosition, b.Bounds));
+
+        if (hit is null) return;          // nothing was clicked
+
+        logger.Information("Button {Index} clicked!", hit.Index);
+
+        switch (hit.Index)
         {
-            if (IsPointInRectangle(mousePosition, button.Bounds))
-            {
-                // Handle button click action here
-                logger.Information("Button {Index} clicked!", button.Index);
-
-                // Example: You can add specific button actions here
-                switch (button.Index)
-                {
-                    case 0:
-                        // Button 0 action (e.g., Start Game)
-                        logger.Information("Start Game button pressed");
-                        break;
-                    case 1:
-                        // Button 1 action (e.g., Settings)
-                        logger.Information("Settings button pressed");
-                        break;
-                    case 2:
-                        // Button 2 action (e.g., Exit)
-                        logger.Information("Exit button pressed");
-                        break;
-                }
-
-                break; // Only handle first button found
-            }
+            case 0:
+                logger.Information("Start Game button pressed");
+                break;
+            case 1:
+                logger.Information("Settings button pressed");
+                break;
+            case 2:
+                logger.Information("Exit button pressed");
+                break;
         }
     }
 

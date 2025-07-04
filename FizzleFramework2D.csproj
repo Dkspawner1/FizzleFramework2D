@@ -22,6 +22,7 @@
 
     <!-- SDL3 packages -->
     <ItemGroup>
+        <PackageReference Include="Arch" Version="2.1.0" />
         <PackageReference Include="Hexa.NET.SDL3" Version="1.2.16" />
         <PackageReference Include="Hexa.NET.SDL3.Image" Version="1.0.0" />
     </ItemGroup>
